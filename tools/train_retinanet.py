@@ -18,7 +18,9 @@ You may want to write your own script with your datasets and other customization
 import os
 
 from detectron2.data.datasets import register_coco_instances
-from detectron2.data import DatasetCatalog
+from detectron2.data import DatasetCatalog, MetadataCatalog
+
+import torch
 
 import logging
 import os
@@ -27,7 +29,6 @@ from collections import OrderedDict
 import detectron2.utils.comm as comm
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
-from detectron2.data import MetadataCatalog
 from detectron2.engine import DefaultTrainer, default_argument_parser, default_setup, hooks, launch
 from detectron2.evaluation import (
     CityscapesInstanceEvaluator,
@@ -123,31 +124,42 @@ def setup(args):
     
     default_setup(cfg, args)
     
-    data_root = r"/media/nahyun/HDD/data_100/" # data home path
+    data_root = r"/mnt/data_100/" # data home path
 
-    register_coco_instances("retinanet_train", {}, data_root + "instances_train.json", data_root+'train/images')
-    register_coco_instances("retinanet_val", {}, data_root + "instances_val.json", data_root+'val/images')
+    register_coco_instances("retinanet_train", {}, os.path.join(data_root, "instances_train.json"), os.path.join(data_root, 'train', 'images'))
+    register_coco_instances("retinanet_val", {}, os.path.join(data_root, "instances_val.json"), os.path.join(data_root,'val/images'))
 
-    register_coco_instances("retinanet_test", {}, data_root + "instances_test.json", data_root + 'test_8')
+    register_coco_instances("retinanet_test", {}, os.path.join(data_root, "instances_test.json"), os.path.join('/mnt/realDB/test_8','images'))
 
-    # get labels
-    with open(data_root + 'labels.txt', 'r') as f:
-        labels_list = f.readlines()
+    # # get labels
+    # with open(data_root + 'labels.txt', 'r') as f:
+    #     labels_list = f.readlines()
 
-    labels = []
+    # labels = []
 
-    for l in labels_list:
-        labels.append(l.split(' ')[-1].strip())
+    # for l in labels_list:
+    #     labels.append(l.split(' ')[-1].strip())
     
-    # MetadaStaCatalog.get("retinanet_train").thing_classes = labels
+    # MetadataCatalog.get("retinanet_train").thing_classes = labels
     # MetadataCatalog.get("retinanet_val").thing_classes = labels
     # MetadataCatalog.get("retinanet_test").thing_classes = labels
 
     cfg.DATASETS.TRAIN = ("retinanet_train", )
     cfg.DATASETS.TEST = ("retinanet_test", )
 
-    cfg.TEST.EVAL_PERIOD = 500
+    # cfg.TEST.EVAL_PERIOD = 500
+    cfg.MODEL.RETINANET.NUM_CLASSES = 100
 
+    cfg.SOLVER.IMS_PER_BATCH = 12
+    ITERS_IN_ONE_EPOCH = int(20000 / cfg.SOLVER.IMS_PER_BATCH)
+    # cfg.SOLVER.MAX_ITER = (ITERS_IN_ONE_EPOCH * 5) - 1  # 5 epochs
+    cfg.SOLVER.MAX_ITER = (ITERS_IN_ONE_EPOCH) -1
+    cfg.SOLVER.CHECKPOINT_PERIOD = ITERS_IN_ONE_EPOCH - 1
+    cfg.TEST.EVAL_PERIOD = ITERS_IN_ONE_EPOCH
+
+    MetadataCatalog.get("retinanet_train").evaluator_type = 'coco'
+    MetadataCatalog.get("retinanet_val").evaluator_type = 'coco'
+    
     cfg.freeze()
 
     return cfg
@@ -155,6 +167,8 @@ def setup(args):
 
 def main(args):
     cfg = setup(args)
+
+    torch.cuda.empty_cache()
 
     if args.eval_only:
         model = Trainer.build_model(cfg)
