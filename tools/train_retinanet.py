@@ -25,6 +25,7 @@ import torch
 import logging
 import os
 from collections import OrderedDict
+from detectron2 import model_zoo
 
 import detectron2.utils.comm as comm
 from detectron2.checkpoint import DetectionCheckpointer
@@ -126,10 +127,12 @@ def setup(args):
     
     data_root = r"/mnt/data_100/" # data home path
 
+    
+
     register_coco_instances("retinanet_train", {}, os.path.join(data_root, "instances_train.json"), os.path.join(data_root, 'train', 'images'))
     register_coco_instances("retinanet_val", {}, os.path.join(data_root, "instances_val.json"), os.path.join(data_root,'val/images'))
 
-    register_coco_instances("retinanet_test", {}, os.path.join(data_root, "instances_test.json"), os.path.join('/mnt/realDB/test_8','images'))
+    register_coco_instances("retinanet_test", {}, os.path.join(data_root, "instances_test.json"),  r'/mnt/realDB/test/images')
 
     # # get labels
     # with open(data_root + 'labels.txt', 'r') as f:
@@ -152,13 +155,17 @@ def setup(args):
 
     cfg.SOLVER.IMS_PER_BATCH = 12
     ITERS_IN_ONE_EPOCH = int(20000 / cfg.SOLVER.IMS_PER_BATCH)
-    # cfg.SOLVER.MAX_ITER = (ITERS_IN_ONE_EPOCH * 5) - 1  # 5 epochs
-    cfg.SOLVER.MAX_ITER = (ITERS_IN_ONE_EPOCH) -1
+    cfg.SOLVER.MAX_ITER = (ITERS_IN_ONE_EPOCH * 5) - 1  # 5 epochs
+    # cfg.SOLVER.MAX_ITER = (ITERS_IN_ONE_EPOCH) -1
     cfg.SOLVER.CHECKPOINT_PERIOD = ITERS_IN_ONE_EPOCH - 1
     cfg.TEST.EVAL_PERIOD = ITERS_IN_ONE_EPOCH
 
-    MetadataCatalog.get("retinanet_train").evaluator_type = 'coco'
-    MetadataCatalog.get("retinanet_val").evaluator_type = 'coco'
+    # MetadataCatalog.get("retinanet_train").evaluator_type = 'coco'
+    # MetadataCatalog.get("retinanet_val").evaluator_type = 'coco'
+
+    yaml_f = "retinanet_R_50_FPN_3x.yaml"
+
+    cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-Detection/{}".format(yaml_f))
     
     cfg.freeze()
 
