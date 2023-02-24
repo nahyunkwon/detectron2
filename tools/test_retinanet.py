@@ -4,7 +4,9 @@ from detectron2.engine import DefaultPredictor
 from detectron2.data import build_detection_test_loader
 from detectron2.data.datasets import register_coco_instances
 from detectron2.evaluation import COCOEvaluator, inference_on_dataset
+
 import os
+import sys
 
 def test(weights):
     #register your data
@@ -73,12 +75,12 @@ def resize():
 
 if __name__ == "__main__":
     print('1st')
-    test("./output/model_0001426.pth")
-    print('2nd')
     test("./output/model_0001664.pth")
+    print('2nd')
+    test("./output/model_0003329.pth")
     print('3rd')
-    test("./output/model_0009998.pth")
+    test("./output/model_0004994.pth")
     print('final')
-    test("./output/retinanet_imagenet.pth")
+    # test("./output/retinanet_imagenet.pth")
 
     # main()

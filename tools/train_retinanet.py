@@ -120,32 +120,26 @@ def setup(args):
     Create configs and perform basic setups.
     """
     cfg = get_cfg()
-    cfg.merge_from_file(args.config_file)
+
+    ## COCO pretrained weights
+    yaml_f = "retinanet_R_50_FPN_3x.yaml"
+    cfg.merge_from_file(model_zoo.get_config_file("COCO-Detection/{}".format(yaml_f)))
+    cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-Detection/{}".format(yaml_f))
+
+    ## ImageNet pretrained weights
+    # cfg.merge_from_file('../configs/COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml')
+    
     cfg.merge_from_list(args.opts)
     
     default_setup(cfg, args)
     
-    data_root = r"/mnt/data_100/" # data home path
-
-    
+    data_root = r"/media/nahyun/HDD//data_100/" # data home path 
+    test_images = r'/media/nahyun/HDD/realDB/test/images'
 
     register_coco_instances("retinanet_train", {}, os.path.join(data_root, "instances_train.json"), os.path.join(data_root, 'train', 'images'))
-    register_coco_instances("retinanet_val", {}, os.path.join(data_root, "instances_val.json"), os.path.join(data_root,'val/images'))
+    register_coco_instances("retinanet_val", {}, os.path.join(data_root, "instances_val.json"), os.path.join(data_root, 'val', 'images'))
 
-    register_coco_instances("retinanet_test", {}, os.path.join(data_root, "instances_test.json"),  r'/mnt/realDB/test/images')
-
-    # # get labels
-    # with open(data_root + 'labels.txt', 'r') as f:
-    #     labels_list = f.readlines()
-
-    # labels = []
-
-    # for l in labels_list:
-    #     labels.append(l.split(' ')[-1].strip())
-    
-    # MetadataCatalog.get("retinanet_train").thing_classes = labels
-    # MetadataCatalog.get("retinanet_val").thing_classes = labels
-    # MetadataCatalog.get("retinanet_test").thing_classes = labels
+    register_coco_instances("retinanet_test", {}, os.path.join(data_root, "instances_test.json"), test_images)
 
     cfg.DATASETS.TRAIN = ("retinanet_train", )
     cfg.DATASETS.TEST = ("retinanet_test", )
@@ -155,18 +149,11 @@ def setup(args):
 
     cfg.SOLVER.IMS_PER_BATCH = 12
     ITERS_IN_ONE_EPOCH = int(20000 / cfg.SOLVER.IMS_PER_BATCH)
-    cfg.SOLVER.MAX_ITER = (ITERS_IN_ONE_EPOCH * 5) - 1  # 5 epochs
+    cfg.SOLVER.MAX_ITER = (ITERS_IN_ONE_EPOCH * 3) - 1  # 3 epochs
     # cfg.SOLVER.MAX_ITER = (ITERS_IN_ONE_EPOCH) -1
     cfg.SOLVER.CHECKPOINT_PERIOD = ITERS_IN_ONE_EPOCH - 1
     cfg.TEST.EVAL_PERIOD = ITERS_IN_ONE_EPOCH
 
-    # MetadataCatalog.get("retinanet_train").evaluator_type = 'coco'
-    # MetadataCatalog.get("retinanet_val").evaluator_type = 'coco'
-
-    yaml_f = "retinanet_R_50_FPN_3x.yaml"
-
-    cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-Detection/{}".format(yaml_f))
-    
     cfg.freeze()
 
     return cfg

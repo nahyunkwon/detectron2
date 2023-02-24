@@ -119,6 +119,7 @@ Run on multiple machines:
     parser.add_argument(
         "--machine-rank", type=int, default=0, help="the rank of this machine (unique per machine)"
     )
+    # parser.add_argument("--pretrained", type=str, default='coco', help='pretrained weights, either coco or imagenet')
 
     # PyTorch still may leave orphan processes in multi-gpu training.
     # Therefore we use a deterministic way to obtain port,
