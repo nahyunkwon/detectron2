@@ -36,8 +36,11 @@ logger = logging.getLogger(__name__)
 
 logger.info('RetinaNet code!')
 
-@META_ARCH_REGISTRY.register()
-class RetinaNet(DenseDetector):
+RETINANET_NERF_REGISTRY = Registry("RetinaNet_nERF")
+
+# @META_ARCH_REGISTRY.register()
+@RETINANET_NERF_REGISTRY.register()
+class RetinaNet_Nerf(DenseDetector):
     """
     Implement RetinaNet in :paper:`RetinaNet`.
     """
@@ -324,7 +327,7 @@ class RetinaNet(DenseDetector):
         return pred[keep[: self.max_detections_per_image]]
 
 
-class RetinaNetHead(nn.Module):
+class RetinaNetHead_Nerf(nn.Module):
     """
     The head used in RetinaNet for object classification and box regression.
     It has two subnets for the two tasks, with a common structure but separate parameters.
@@ -367,7 +370,10 @@ class RetinaNetHead(nn.Module):
         self.head_param = nerfWeights[:, :, None, None]  # C x 10000 x 1 x 1
 
         self.flagConv4feats = False
-        # self.actMapDim = actMapDim  # e.g., 1024 based on FasterRCNN activation maps
+        self.actMapDim = actMapDim  # e.g., 1024 based on FasterRCNN activation maps
+        
+        # for the background class, appended to the output feature maps and yielding (C+1) feature maps
+        self.backgroundClassifier = nn.Conv2d(self.actMapDim, 1, kernel_size=1)  
             
         ## end nerf head properties
 
@@ -396,25 +402,18 @@ class RetinaNetHead(nn.Module):
             [input_shape[0].channels] + list(conv_dims), conv_dims
         ):
             ## class subnet (RetinaNet)
+            # cls_subnet.append(
+            #     nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+            # )
+            # if norm:
+            #     cls_subnet.append(get_norm(norm, out_channels))
+            # cls_subnet.append(nn.ReLU())
 
-            if cfg.MODEL.ROI_HEADS.NAME == 'NerfHeads':
-                print('NK: nerf head part')
-                # self.convLayer4nerfWeightsTransform = nn.Conv2d(self.nerfFeaDim, self.actMapDim, kernel_size=1)
-                cls_subnet.append(
-                    self.convLayer4nerfWeightsTransform = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=1)
-                    # self.backgroundClassifier = nn.Conv2d(out_channels 1, kernel_size=1, stride=1, padding=1)  
-                    
-                )
-                # for the background class, appended to the output feature maps and yielding (C+1) feature maps     
+            ## nerf head
 
-            else:
-                cls_subnet.append(
-                    nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
-                )
-                if norm:
-                    cls_subnet.append(get_norm(norm, out_channels))
-                cls_subnet.append(nn.ReLU())
-
+            self.convLayer4nerfWeightsTransform = nn.Conv2d(self.nerfFeaDim, self.actMapDim, kernel_size=1)
+        
+            ## end nerf head
 
             ## bbox subnet
             bbox_subnet.append(
@@ -423,10 +422,6 @@ class RetinaNetHead(nn.Module):
             if norm:
                 bbox_subnet.append(get_norm(norm, out_channels))
             bbox_subnet.append(nn.ReLU())
-
-        cls_subnet.append(
-                self.classesToAnchors = nn.Conv2d(self.C_classes, self.C_classes * num_anchors, kernel_size=1)
-            )
 
         self.cls_subnet = nn.Sequential(*cls_subnet)
         self.bbox_subnet = nn.Sequential(*bbox_subnet)
@@ -482,48 +477,36 @@ class RetinaNetHead(nn.Module):
                 relative offset between the anchor and the ground truth box.
         """
         assert len(features) == self._num_features
+        logits = []
+        bbox_reg = []
+        for feature in features:
+            logits.append(self.cls_score(self.cls_subnet(feature)))
+            bbox_reg.append(self.bbox_pred(self.bbox_subnet(feature)))
 
-        if cfg.MODEL.ROI_HEADS.NAME == 'NerfHeads':
 
-            ## nerf forward
+        ## nerf forward
 
-            self.classifier_weights = self.convLayer4nerfWeightsTransform(self.head_param)
-            self.classifier_weights = self.classifier_weights.squeeze().squeeze()  # C x 1024
-            # self.backgroundFeatMap = self.backgroundClassifier(featMap)
-            
-            self.featMap = featMap 
-
-            NN, CC, HH, WW = self.featMap.shape # N x 1024 x H x W
-            self.featMap = torch.reshape(self.featMap, (0, 2, 3, 1)) # N x 1024 x HW
-            self.featMap = torch.permute(self.featMap, (1, 0)) # N x HW x 1024
-            
-            self.classifier_weights = torch.permute(self.classifier_weights, (1, 0)) # 1024 x C
-            
-            out = torch.matmul(self.featMap, self.classifier_weights) # N x HW x C
-            out = torch.permute(out, [0, 3, 1, 2]) # N x C x HW
-            # out = torch.reshape(out, (NN, -1, HH, WW)) # N x C x H x W
-            out = torch.cat((out, self.backgroundFeatMap), 1)  # concatenate background logit score map, so N x (C+1) x H x W
-            
-            # out_reshaped = np.reshape(out, np.shape(logits))
-
-            # logits = out_reshaped
-
-            logits = out
-            ## end nerf forward
+        self.classifier_weights = self.convLayer4nerfWeightsTransform(self.head_param)
+        self.classifier_weights = self.classifier_weights.squeeze().squeeze()  # C x 1024
+        self.backgroundFeatMap = self.backgroundClassifier(featMap)
         
-        else:
-            logits = []
-            bbox_reg = []
-            for feature in features:
-                logits.append(self.cls_score(self.cls_subnet(feature)))
-                bbox_reg.append(self.bbox_pred(self.bbox_subnet(feature)))
+        self.featMap = featMap 
 
-            
-            logger.info('NK: logits shape')
-
-            print(logits.shape)
-
+        NN, CC, HH, WW = self.featMap.shape # N x 1024 x H x W
+        self.featMap = torch.reshape(self.featMap, (NN, CC, HH*WW)) # N x 1024 x HW
+        self.featMap = torch.permute(self.featMap, (0,2,1)) # N x HW x 1024
         
+        self.classifier_weights = torch.permute(self.classifier_weights, (1, 0)) # 1024 x C
+        
+        out = torch.matmul(self.featMap, self.classifier_weights) # N x HW x C
+        out = torch.permute(out, [0, 2, 1]) # N x C x HW
+        out = torch.reshape(out, (NN, -1, HH, WW)) # N x C x H x W
+        out = torch.cat((out, self.backgroundFeatMap), 1)  # concatenate background logit score map, so N x (C+1) x H x W
+        
+        out_reshaped = np.reshape(out, np.shape(logits))
+
+        logits = out_reshaped
+        ## end nerf forward
 
 
         return logits, bbox_reg

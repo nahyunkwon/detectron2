@@ -21,6 +21,10 @@ from detectron2.data.datasets import register_coco_instances
 from detectron2.data import DatasetCatalog, MetadataCatalog
 
 import torch
+import torch.nn as nn
+import numpy as np
+from collections import OrderedDict
+
 
 import logging
 import os
@@ -43,7 +47,13 @@ from detectron2.evaluation import (
     verify_results,
 )
 from detectron2.modeling import GeneralizedRCNNWithTTA
+from detectron2.config import CfgNode as CN
 
+# import detectron2.modeling.meta_arch.retinanet as retinanet
+
+# from detectron2.modeling.meta_arch.retinanet import RetinaNet
+
+logger = logging.getLogger("detectron2")
 
 def build_evaluator(cfg, dataset_name, output_folder=None):
     """
@@ -119,22 +129,29 @@ def setup(args):
     """
     Create configs and perform basic setups.
     """
-    cfg = get_cfg()
+    cfg = CN()
+
+    # print(cfg)
 
     ## COCO pretrained weights
-    yaml_f = "retinanet_R_50_FPN_3x.yaml"
-    cfg.merge_from_file(model_zoo.get_config_file("COCO-Detection/{}".format(yaml_f)))
-    cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-Detection/{}".format(yaml_f))
+    # yaml_f = "retinanet_R_50_FPN_3x.yaml"
+    # cfg.merge_from_file(model_zoo.get_config_file("COCO-Detection/{}".format(yaml_f)))
+    # cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-Detection/{}".format(yaml_f))
 
     ## ImageNet pretrained weights
     # cfg.merge_from_file(args.config_file)
-    logger = logging.getLogger("detectron2.trainer")
 
-    logger.info('NK: args.opts', args.opts)
+    # logger.info('NK: args.opts', args.opts)
     
-    cfg.merge_from_list(args.opts)
+    # cfg.merge_from_list(args.opts)
+
+    # cfg.MODEL.BACKBONE.NAME = 'build_retinanet_resnet_fpn_backbone'
     
-    default_setup(cfg, args)
+    # default_setup(cfg, args)
+    cfg.merge_from_file('../configs/COCO-Detection/retinanet_R_50_FPN_3x.yaml')
+
+    print('configuration retinanet')
+    logger.info(cfg)
     
     data_root = r"/media/nahyun/HDD//data_100/" # data home path 
     test_images = r'/media/nahyun/HDD/realDB/test/images'
@@ -149,9 +166,20 @@ def setup(args):
 
     # cfg.TEST.EVAL_PERIOD = 500
     cfg.MODEL.RETINANET.NUM_CLASSES = 100
+
+    # logger.info('RETINANET HEAD INFO (NK)')
+
+    # logger.info(cfg.MODEL.RETINANET)
+
+    # logger.info(NeRF_Head_RetinaNet(nerfWeights))
+    
+    # nerfWeights = torch.load('/media/nahyun/HDD/nerf_weights/nerf_weights_10k.pth')
+    # cfg.MODEL.RETINANET.RetinaNetHead = NeRF_Head_RetinaNet(nerfWeights)
     
     # cfg.MODEL.ROI_HEADS.NAME = 'NeRFROIHeads'
     # cfg.MODEL.ROI_HEADS.NERF_WEIGHTS = "/media/nahyun/HDD/nerf_weights/nerf_weights_10k.pth"
+
+    # cfg.SOLVER.STEPS = (7000,)
 
     cfg.SOLVER.IMS_PER_BATCH = 12
     ITERS_IN_ONE_EPOCH = int(20000 / cfg.SOLVER.IMS_PER_BATCH)
@@ -160,17 +188,34 @@ def setup(args):
     cfg.SOLVER.CHECKPOINT_PERIOD = ITERS_IN_ONE_EPOCH - 1
     cfg.TEST.EVAL_PERIOD = ITERS_IN_ONE_EPOCH
 
+
+    # cfg.MODEL.ROI_BOX_HEAD = NeRF_Head_RetinaNet(nerfWeights)
+
+    trainer = Trainer(cfg)
+    print('(NK) printing trainer')
+    print(trainer.model)
+
     cfg.freeze()
 
     return cfg
 
 
 def main(args):
+    
     cfg = setup(args)
-
     torch.cuda.empty_cache()
 
-    x
+    if args.eval_only:
+        model = Trainer.build_model(cfg)        
+        DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
+            cfg.MODEL.WEIGHTS, resume=args.resume
+        )
+        res = Trainer.test(cfg, model)
+        if cfg.TEST.AUG.ENABLED:
+            res.update(Trainer.test_with_TTA(cfg, model))
+        if comm.is_main_process():
+            verify_results(cfg, res)
+        return res
 
     """
     If you'd like to do anything fancier than the standard training logic,
@@ -178,6 +223,8 @@ def main(args):
     subclassing the trainer.
     """
     trainer = Trainer(cfg)
+    print('(NK) printing trainer')
+    # print(trainer.model)
     trainer.resume_or_load(resume=args.resume)
     if cfg.TEST.AUG.ENABLED:
         trainer.register_hooks(

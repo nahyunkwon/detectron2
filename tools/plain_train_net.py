@@ -174,8 +174,13 @@ def setup(args):
     Create configs and perform basic setups.
     """
     cfg = get_cfg()
-    cfg.merge_from_file(args.config_file)
-    cfg.merge_from_list(args.opts)
+    # cfg.merge_from_file(args.config_file)
+    # cfg.merge_from_list(args.opts)
+
+    cfg.MODEL.BACKBONE.NAME = 'build_resnet_fpn_backbone'
+
+
+
     cfg.freeze()
     default_setup(
         cfg, args

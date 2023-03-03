@@ -7,16 +7,17 @@ from detectron2.evaluation import COCOEvaluator, inference_on_dataset
 
 import os
 import sys
+import argparse
 
 def test(weights):
     #register your data
-    data_root = r"/mnt/data_100/" # data home path
+    data_root = r"/media/nahyun/HDD/data_100/" # data home path
 
     # register_coco_instances("retinanet_train", {}, os.path.join(data_root, "instances_train.json"), os.path.join(data_root, 'train', 'images'))
     # register_coco_instances("retinanet_val", {}, os.path.join(data_root, "instances_val.json"), os.path.join(data_root,'val/images'))
 
     try:
-        register_coco_instances("retinanet_test", {}, os.path.join(data_root, "instances_test.json"), r'/mnt/realDB/test/images')
+        register_coco_instances("retinanet_test", {}, os.path.join(data_root, "instances_test.json"), r'/media/nahyun/HDD/realDB/test/images')
     except:
         pass
     #load the config file, configure the threshold value, load weights 
@@ -74,13 +75,35 @@ def resize():
 
 
 if __name__ == "__main__":
-    print('1st')
-    test("./output/model_0001664.pth")
-    print('2nd')
-    test("./output/model_0003329.pth")
-    print('3rd')
-    test("./output/model_0004994.pth")
-    print('final')
-    # test("./output/retinanet_imagenet.pth")
 
+    # # Construct the argument parser and parse the arguments
+    # arg_desc = '''\
+    #         Test checkpoints 
+    #         '''
+    # parser = argparse.ArgumentParser(formatter_class = argparse.RawDescriptionHelpFormatter,
+    #                                     description= arg_desc)
+
+    # parser.add_argument('-o', '--output', help='model output location', default='./output/')
+
+    # args = vars(parser.parse_args())
+
+    # print(args)
+
+    # models = []
+
+    # for f in os.listdir(args['output']):
+    #     if '.pth' in f:
+    #         models.append(f)
+
+    # models = sorted(models)
+
+    # epoch = 1
+
+    # for m in models:
+    #     print('------- epoch:', epoch, 'model:', m, '--------')
+    #     test(args['output'] + m)
+    #     epoch += 1
+
+    test('../../nerf_det/detectron2/cut_paste_learn_syn/output/model_0001426.pth')
+    
     # main()
